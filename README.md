@@ -3,4 +3,5 @@
 
 
 - [atom_helper.py](atom_helper.py) 搜索 Atom 的插件或者主题。
+- [adb_device.py](adb_device.py) adb 命令工具
 - ……
