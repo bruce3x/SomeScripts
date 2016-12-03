@@ -1,6 +1,6 @@
 # coding=utf-8
-import os
 import re
+import subprocess
 import sys
 import time
 
@@ -9,19 +9,20 @@ from lxml import etree
 target_package = 'com.mingdao'
 launcher_activity = 'com.mingdao/.presentation.ui.login.WelcomeActivity'
 
-username, password = sys.argv[1:3]
-
-xml_name = 'window_dump.xml'
-remote_xml = os.path.join('/sdcard', xml_name)
-local_xml = os.path.join(os.path.expanduser('~/Downloads'), xml_name)
+dump_file = '/sdcard/window_dump.xml'
 
 # '[42,1023][126,1080]'
 bounds_pattern = re.compile(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]')
 
 
 def run(cmd):
-    # adb <cmd>
-    os.popen('adb %s' % cmd)
+    # adb <CMD>
+    return subprocess.check_output(('adb %s' % cmd).split(' '))
+
+
+def sleep(duration):
+    if duration > 0:
+        time.sleep(duration)
 
 
 def sleep_later(duration=0.5):
@@ -29,18 +30,28 @@ def sleep_later(duration=0.5):
         def do(*args, **kwargs):
             func(*args, **kwargs)
             if 'duration' in kwargs.keys():
-                time.sleep(kwargs['duration'])
+                sleep(kwargs['duration'])
             else:
-                time.sleep(duration)
+                sleep(duration)
 
         return do
 
     return wrapper
 
 
+def timeit(func):
+    def do(*args, **kwargs):
+        start = time.time()
+        func(*args, **kwargs)
+        end = time.time()
+
+        print '[%s] Time spent %.2f seconds.' % (func.__name__, end - start)
+    return do
+
+
 @sleep_later()
 def open_app_detail(package):
-    print 'Open application detail setting'
+    print 'Open application detail setting: %s' % package
     # adb shell am start -a ACTION -d DATA
     intent_action = 'android.settings.APPLICATION_DETAILS_SETTINGS'
     intent_data = 'package:%s' % package
@@ -48,19 +59,20 @@ def open_app_detail(package):
     run('shell am start -a %s -d %s' % (intent_action, intent_data))
 
 
-def get_dumps():
+def dump_layout():
     print 'Dump window layouts'
-    # adb shell uiautomator dump
-    run('shell uiautomator dump %s' % remote_xml)
-    run('pull %s %s' % (remote_xml, local_xml))
+    # adb shell uiautomator dump <FILE>
+    run('shell uiautomator dump %s' % dump_file)
 
 
 def parse_bounds(text):
-    nodes = etree.parse(local_xml)
+    # adb shell cat /sdcard/window_dump.xml
+    dumps = run('shell cat %s' % dump_file)
+    nodes = etree.XML(dumps)
     return nodes.xpath(u'//node[@text="%s"]/@bounds' % (text))[0]
 
 
-def random_point_in_bounds(bounds):
+def point_in_bounds(bounds):
     """
     '[42,1023][126,1080]'
     """
@@ -72,12 +84,12 @@ def random_point_in_bounds(bounds):
 @sleep_later()
 def click_with_keyword(keyword, dump=True, **kwargs):
     if dump:
-        get_dumps()
+        dump_layout()
     bounds = parse_bounds(keyword)
-    point = random_point_in_bounds(bounds)
+    point = point_in_bounds(bounds)
 
-    print 'Click (%d, %d)' % point
-    # adb shell input tap 84 1051
+    print 'Click "%s" (%d, %d)' % (keyword, point[0], point[1])
+    # adb shell input tap <x> <y>
     run('shell input tap %d %d' % point)
 
 
@@ -88,14 +100,14 @@ def force_stop(package):
     run('shell am force-stop %s' % package)
 
 
-@sleep_later(1)
+@sleep_later(0.5)
 def start_activity(activity):
     print 'Start activity %s' % activity
-    # adb shell am start -n com.mingdao/.presentation.ui.login.WelcomeActivity
+    # adb shell am start -n <activity>
     run('shell am start -n %s' % activity)
 
 
-@sleep_later(1)
+@sleep_later(0.5)
 def clear_data(package):
     print 'Clear app data: %s' % package
     # adb shell pm clear <package>
@@ -114,7 +126,10 @@ def keyboard_back():
     run('shell input keyevent 4')
 
 
+@timeit
 def main():
+    username, password = sys.argv[1:3]
+
     force_stop(target_package)
 
     clear_data(target_package)
@@ -131,11 +146,11 @@ def main():
 
     click_with_keyword(u'跳过')
 
-    click_with_keyword(u'手机或邮箱')
+    click_with_keyword(u'手机或邮箱', duration=0)
 
     keyboard_input(username)
 
-    click_with_keyword(u'密码', dump=False)
+    click_with_keyword(u'密码', dump=False, duration=0)
 
     keyboard_input(password)
 
@@ -144,5 +159,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-    print 'done.'
