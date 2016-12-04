@@ -20,19 +20,14 @@ def run(cmd):
     return subprocess.check_output(('adb %s' % cmd).split(' '))
 
 
-def sleep(duration):
-    if duration > 0:
-        time.sleep(duration)
-
-
 def sleep_later(duration=0.5):
     def wrapper(func):
         def do(*args, **kwargs):
             func(*args, **kwargs)
             if 'duration' in kwargs.keys():
-                sleep(kwargs['duration'])
+                time.sleep(kwargs['duration'])
             else:
-                sleep(duration)
+                time.sleep(duration)
 
         return do
 
